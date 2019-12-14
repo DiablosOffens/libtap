@@ -2,11 +2,21 @@ CC ?= gcc
 CFLAGS += -Wall -I. -fPIC
 PREFIX ?= $(DESTDIR)/usr/local
 TESTS = $(patsubst %.c, %, $(wildcard t/*.c))
+LIB_EXT = .a
+OBJ_EXT = .o
+SO = so
+LDDLFLAGS = 
 
 ifdef ANSI
 	# -D_BSD_SOURCE for MAP_ANONYMOUS
 	CFLAGS += -ansi -D_BSD_SOURCE
 	LDLIBS += -lbsd-compat
+endif
+
+ifdef WINDOWS
+    SO = dll
+	CC = x86_64-w64-mingw32-gcc
+    LDDLFLAGS += -Wl,--enable-auto-image-base -Xlinker --out-implib -Xlinker libtap.dll.a
 endif
 
 %:
@@ -18,10 +28,10 @@ endif
 %.a:
 	$(AR) rcs $@ $(filter %.o, $^)
 
-%.so:
-	$(CC) -shared $(LDFLAGS) $(TARGET_ARCH) $(filter %.o, $^) $(LDLIBS) -o $@
+%.$(SO):
+	$(CC) -shared $(LDFLAGS) $(LDDLFLAGS) $(TARGET_ARCH) $(filter %.o, $^) $(LDLIBS) -o $@
 
-all: libtap.a libtap.so tap.pc tests
+all: libtap.a libtap.$(SO) tap.pc tests
 
 tap.pc:
 	@echo generating tap.pc
@@ -39,7 +49,7 @@ tap.pc:
 
 libtap.a: tap.o
 
-libtap.so: tap.o
+libtap.$(SO): tap.o
 
 tap.o: tap.c tap.h
 
@@ -50,17 +60,23 @@ $(TESTS): %: %.o libtap.a
 $(patsubst %, %.o, $(TESTS)): %.o: %.c tap.h
 
 clean:
-	rm -rf *.o t/*.o tap.pc libtap.a libtap.so $(TESTS)
+	rm -rf *.o t/*.o tap.pc libtap.a libtap.$(SO) libtap.$(SO).a $(TESTS)
 
-install: libtap.a tap.h libtap.so tap.pc
+install: libtap.a tap.h libtap.$(SO) tap.pc
 	mkdir -p $(PREFIX)/lib $(PREFIX)/include $(PREFIX)/lib/pkgconfig
 	install -c libtap.a $(PREFIX)/lib
-	install -c libtap.so $(PREFIX)/lib
+	install -c libtap.$(SO) $(PREFIX)/lib
+ifdef WINDOWS
+	install -c libtap.$(SO).a $(PREFIX)/lib
+endif
 	install -c tap.pc $(PREFIX)/lib/pkgconfig
 	install -c tap.h $(PREFIX)/include
 
 uninstall:
-	rm $(PREFIX)/lib/libtap.a $(PREFIX)/lib/libtap.so $(PREFIX)/include/tap.h
+	rm $(PREFIX)/lib/libtap.a $(PREFIX)/lib/libtap.$(SO) $(PREFIX)/include/tap.h
+ifdef WINDOWS
+	rm $(PREFIX)/lib/libtap.$(SO).a
+endif
 
 dist:
 	rm libtap.zip
